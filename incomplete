@@ -1,0 +1,150 @@
+import Data.Set
+
+
+--For mines, we can use the value 9, since no cell should every have 9 mines around it (at most 8)
+testBoard = [[0,1,9,2,1,2,2,9,1],[1,2,2,2,9,2,9,2,1],[1,9,1,1,1,2,1,1,0],[2,2,1,0,0,0,0,0,0],[9,1,0,0,0,0,0,0,0],[1,2,1,1,1,1,1,0,0],[2,3,9,1,1,9,1,0,0],[9,9,2,1,1,1,1,0,0],[2,2,1,0,0,0,0,0,0]]
+
+--Makes a blank "show" board which will be used by GUI to know which cells to display
+makeNewBoard :: (Num t) => Int -> Int -> [[t]]
+makeNewBoard w h = replicate w (replicate h 0)
+
+--Makes the elements in a list unique (removes duplicates)
+--requires importing Data.Set
+--Note: This is apparently a really optimized way to remove duplicates
+--      We will have to find something similar (or write our own function)
+--      to do that same in F#.
+mkUniq :: (Ord a) => [a] -> [a]
+mkUniq = toList . fromList
+
+--Opens a cell in a one-dimensional array (changes 0 to 1)
+open1d :: (Num t) => Int -> [t] -> [t]
+open1d 0 (_:t)    = 1 : t
+open1d j (h:t)
+  |j < 0 || j > l = h:t
+  |otherwise      = h : open1d (j - 1) t
+  where l = length t
+
+--Uses open1d to open a cell in a two-dimensional array
+--Would be used on the "show" board to make cells visible to GUI
+open2d :: (Num t) => Int -> Int -> [[t]] -> [[t]]
+open2d 0 j (h:t) = (open1d j h) : t
+open2d i j (h:t)
+  |i < 0 || j < 0 || i > width || j > height = (h:t)
+  |otherwise                                 = h : (open2d (i - 1) j t)
+  where width = 1 + length t
+        height = length h
+
+--Retrieves the value of a cell
+--Would be used on the "data" board to determine whether to open a cell
+--or end the game because they clicked a mine
+getCellValue :: (Num a) => Int -> Int -> [[a]] -> a
+getCellValue i j infoBoard
+  |i < 0 || j < 0 || i > width || j > height = (-2)
+  |otherwise                                 = (infoBoard !! i) !! j
+  where width = length infoBoard
+        height = length (head infoBoard)
+
+--Creates a list of two-tuples with the coordinates of all the cells
+--to the SE of the chosen cell that will open with the selection of the chosen cell
+getSEcells :: (Num a) => Int -> Int -> [[a]] -> [(Int, Int)]
+getSEcells i j infoBoard
+  |i < 0 || j < 0 || i > width - 1 || j > height - 1 = []
+  |value == 0 = [(i,j)] ++ (getSEcells (i + 1) j infoBoard) ++ (getSEcells i (j + 1) infoBoard)
+  |otherwise = [(i,j)]
+  where value = getCellValue i j infoBoard
+        width = length infoBoard
+        height = length (head infoBoard)
+        
+--Creates a list of two-tuples with the coordinates of all the cells
+--to the SW of the chosen cell that will open with the selection of the chosen cell
+getSWcells :: (Num a) => Int -> Int -> [[a]] -> [(Int, Int)]
+getSWcells i j infoBoard
+  |i < 0 || j < 0 || i > width - 1 || j > height - 1 = []
+  |value == 0 = [(i,j)] ++ (getSWcells (i - 1) j infoBoard) ++ (getSWcells i (j + 1) infoBoard)
+  |otherwise = [(i,j)]
+  where value = getCellValue i j infoBoard
+        width = length infoBoard
+        height = length (head infoBoard)
+
+--Creates a list of two-tuples with the coordinates of all the cells
+--to the NE of the chosen cell that will open with the selection of the chosen cell
+getNEcells :: (Num a) => Int -> Int -> [[a]] -> [(Int, Int)]
+getNEcells i j infoBoard
+  |i < 0 || j < 0 || i > width - 1 || j > height - 1 = []
+  |value == 0 = [(i,j)] ++ (getNEcells (i + 1) j infoBoard) ++ (getNEcells i (j - 1) infoBoard)
+  |otherwise = [(i,j)]
+  where value = getCellValue i j infoBoard
+        width = length infoBoard
+        height = length (head infoBoard)
+
+--Creates a list of two-tuples with the coordinates of all the cells
+--to the NW of the chosen cell that will open with the selection of the chosen cell
+getNWcells :: (Num a) => Int -> Int -> [[a]] -> [(Int, Int)]
+getNWcells i j infoBoard
+  |i < 0 || j < 0 || i > width - 1 || j > height - 1 = []
+  |value == 0 = [(i,j)] ++ (getNWcells (i - 1) j infoBoard) ++ (getNWcells i (j - 1) infoBoard)
+  |otherwise = [(i,j)]
+  where value = getCellValue i j infoBoard
+        width = length infoBoard
+        height = length (head infoBoard)
+
+--Given a list of two-tuples indicating coordinates of cells, generates a new list
+--which is created by running getNEcells, getNWcells, getSEcells, and getSWcells on each
+--cell in the given list
+genMoveList :: (Num a) => [(Int, Int)] -> [[a]] -> [(Int, Int)]
+genMoveList [] infoBoard = []
+genMoveList ((a,b):t) infoBoard
+  |a < 0 || b < 0 || a > width - 1 || b > height - 1 = []
+  |otherwise = (getNEcells a b infoBoard) ++ (getSEcells a b infoBoard) ++ (getNWcells a b infoBoard) ++ (getSWcells a b infoBoard) ++ (genMoveList t infoBoard)
+  where value = getCellValue a b infoBoard
+        width = length infoBoard
+        height = length (head infoBoard)
+        
+--Recursively runs genMoveList on two lists until they match, which indicates
+--that all the cells which should be opened are in the output list of cells
+--The first list to be passed in is a list with just the original cell to be opened
+--in it as a tuple [(i,j)]. The second list is the result of running
+--genMoveList on this single element list. If they are not equal (indicating
+--more cells need to be opened besides just [(i,j)], we run the same function
+--on the new list and the result of running genMovelist on this new list
+getAllCells :: (Num a) => [(Int, Int)] -> [(Int, Int)] -> [[a]] -> [(Int, Int)]
+getAllCells l1 l2 infoBoard
+  |l1' == l2' = l1'
+  |otherwise  = getAllCells l2' (genMoveList l2' infoBoard) infoBoard
+  where l1' = mkUniq l1
+        l2' = mkUniq l2
+
+--Opens all the cells that are in a list (as two-tuples)
+--This doesn't check whether or not they land on a mine or not.
+--This function is only called once we know that they
+--have chosen a valid cell
+makeMove :: (Num t) => [(Int, Int)] -> [[t]] -> [[t]]
+makeMove [] board = board
+makeMove ((a,b):t) board = open2d a b (makeMove t board)
+
+--Given a cell, a "show" board, and a "data" board, will return
+--the changed "show" board indicating which cells have now opened
+move :: (Num a1, Num a) => Int -> Int -> [[a1]] -> [[a]] -> [[a1]]
+move i j board infoBoard
+  |i < 0 || j < 0 || i > width - 1 || j > height - 1 = board
+  |otherwise = makeMove moveList board
+  where width = length board
+        height = length (head board)
+        moveList = getAllCells [(i,j)] (mkUniq (genMoveList [(i,j)] infoBoard)) infoBoard
+
+
+{- Still to do:
+
+1) write a function that gives random locations for mines (given size of board and number
+   of desired mines)
+
+2) write a function that, given the random locations of the mines, creates a
+   "data" board (or infoBoard)
+
+3) write the play function, which will first determine whether the move is valid
+   (i.e. within the bounds of the board, if the cell hasn't already been opened,
+   and whether or not the cell contains a mine or not), and if it is, make the move
+   and return the corresponding "show" board. If not, game over
+       a) this function will be recursive: as long as a mine isn't hit, make the move
+          and pass the resulting "show" board into the play function for the next move
+-}
