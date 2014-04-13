@@ -54,7 +54,7 @@ getSEcells i j infoBoard
   where value = getCellValue i j infoBoard
         width = length infoBoard
         height = length (head infoBoard)
-        
+
 --Creates a list of two-tuples with the coordinates of all the cells
 --to the SW of the chosen cell that will open with the selection of the chosen cell
 getSWcells :: (Num a) => Int -> Int -> [[a]] -> [(Int, Int)]
@@ -99,7 +99,7 @@ genMoveList ((a,b):t) infoBoard
   where value = getCellValue a b infoBoard
         width = length infoBoard
         height = length (head infoBoard)
-        
+
 --Recursively runs genMoveList on two lists until they match, which indicates
 --that all the cells which should be opened are in the output list of cells
 --The first list to be passed in is a list with just the original cell to be opened
@@ -127,24 +127,69 @@ makeMove ((a,b):t) board = open2d a b (makeMove t board)
 move :: (Num a1, Num a) => Int -> Int -> [[a1]] -> [[a]] -> [[a1]]
 move i j board infoBoard
   |i < 0 || j < 0 || i > width - 1 || j > height - 1 = board
-  |otherwise = makeMove moveList board
+  |otherwise = makeMove moveList board 
   where width = length board
         height = length (head board)
         moveList = getAllCells [(i,j)] (mkUniq (genMoveList [(i,j)] infoBoard)) infoBoard
 
 
-{- Still to do:
+{- Still to do: 
 
 1) write a function that gives random locations for mines (given size of board and number
    of desired mines)
 
-2) write a function that, given the random locations of the mines, creates a
-   "data" board (or infoBoard)
-
-3) write the play function, which will first determine whether the move is valid
+2) write the play function, which will first determine whether the move is valid
    (i.e. within the bounds of the board, if the cell hasn't already been opened,
    and whether or not the cell contains a mine or not), and if it is, make the move
    and return the corresponding "show" board. If not, game over
        a) this function will be recursive: as long as a mine isn't hit, make the move
           and pass the resulting "show" board into the play function for the next move
 -}
+
+--Very similar to open1d
+--Only difference is instead of replacing the head with a 1
+--it adds 1 to the current cell value
+buildB1d :: (Num t) => Int -> [t] -> [t]
+buildB1d 0 (h:t)    = (h + 1) : t
+buildB1d j (h:t)
+  |j < 0 || j > l      = h:t
+  |otherwise           = h : buildB1d (j - 1) t
+  where l = length t
+
+--Same as open2d except it calls buildB1d
+buildB2d :: (Num t) => Int -> Int -> [[t]] -> [[t]]
+buildB2d 0 j (h:t) = (buildB1d j h) : t
+buildB2d i j (h:t)
+  |i < 0 || j < 0 || i > width || j > height = (h:t)
+  |otherwise                                 = h : (buildB2d (i - 1) j t)
+  where width = 1 + length t
+        height = length h
+        
+--Changes the value of a certain cell in a list
+changeCellVal1d :: a -> Int -> [a] -> [a]
+changeCellVal1d n 0 (h:t) = n:t
+changeCellVal1d n j (h:t)
+  |j < 0 || j > l         = h:t
+  |otherwise              = h : changeCellVal1d n (j - 1) t
+  where l = length t
+  
+--Changes the value of a certain cell in a 2d list (i.e. board)
+changeCellVal2d :: a -> Int -> Int -> [[a]] -> [[a]]
+changeCellVal2d n 0 j (h:t) = (changeCellVal1d n j h) : t
+changeCellVal2d n i j (h:t)
+  |i < 0 || j < 0 || i > width || j > height = (h:t)
+  |otherwise                                 = h : (changeCellVal2d n (i - 1) j t)
+  where width = 1 + length t
+        height = length h
+        
+--This function actually places the mines in their respective locations in the board
+--by changing the cell values to a 9
+placeMines' :: (Num t) => [(Int, Int)] -> [[t]] -> [[t]]        
+placeMines' [] infoBoard = infoBoard
+placeMines' ((i,j):t) infoBoard = changeCellVal2d 9 i j (placeMines' t infoBoard) 
+
+--This function adds 1 to all the cells adjacent to mines, thus building the infoBoard/dataBoard
+--Notice that placeMines' is called after all cells values have been calculated
+placeMines :: (Num t) => [(Int, Int)] -> [[t]] -> [[t]]
+placeMines [] infoBoard = infoBoard
+placeMines ((i,j):t) infoBoard = placeMines' ((i,j):t) (buildB2d (i + 1) j (buildB2d (i - 1) j (buildB2d i (j - 1) (buildB2d i (j + 1) (buildB2d (i - 1) (j + 1) (buildB2d (i + 1) (j - 1) (buildB2d (i + 1) (j + 1) (buildB2d (i - 1) (j - 1) (placeMines t infoBoard)))))))))
